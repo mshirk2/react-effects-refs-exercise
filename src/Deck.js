@@ -1,50 +1,84 @@
-import React, { useState, useEffect } from "react";
-import { v4 as uuid } from "uuid";
+import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import Card from "./Card";
 
-const BASE_URL = "https://deckofcardsapi.com/api/"
+const BASE_URL = "https://deckofcardsapi.com/api/deck";
 
 const Deck = () => {
-    const [deck, setDeck] = useState();
-    const [card, setCard] = useState();
-
-    // const startNewDeck = () => {
-
-    // };
-
-    // const newCard = card => {
-    //     let newCard = {...card, id:uuid()};
-    //     setCard(cards => [...cards, newCard]);
-    // };
-
-    useEffect(() => {
-        async function fetchCard(){
-            const cardResult = await axios.get(`${BASE_URL}`);
-            // add remaining url for get request here
-            setCard(cardResult.data);
-        }
-        fetchCard();
-    }, [card]);
+    const [deck, setDeck] = useState(null);
+    const [drawn, setDrawn] = useState([]);
+    const [autoDraw, setAutoDraw] = useState(false);
+    const timerRef = useRef(null);
 
     useEffect(() => {
         async function fetchDeck(){
-            const deckResult = await axios.get(`${BASE_URL}`);
-            // add remaining url for get request here
+            let deckResult = await axios.get(`${BASE_URL}/new/shuffle`);
             setDeck(deckResult.data);
         }
         fetchDeck();
-    }, [deck]);
+    }, [setDeck]);
+
+    useEffect(() => {
+        async function fetchCard(){
+            let deck_id = deck.deck_id;
+
+            try {
+                let cardResult = await axios.get(`${BASE_URL}/${deck_id}/draw`);
+
+                if (cardResult.data.remaining === 0) {
+                    setAutoDraw(false);
+                    throw new Error("Error: no cards remaining!")
+                }
+
+                const card = cardResult.data.cards[0];
+
+                setDrawn(d => [
+                    ...d, 
+                    {
+                        id: card.code,
+                        name: `${card.suit} ${card.value}`,
+                        image: card.image
+                    }
+                ]);
+            } catch (err){
+                alert(err);
+            }
+        }
+
+        if (autoDraw && !timerRef.current){
+            timerRef.current = setInterval(async ()=>{
+                await fetchCard();
+            }, 1000);
+        }
+
+        return () => {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        };
+        
+    }, [autoDraw, setAutoDraw, deck]);
+
+    const toggleAutoDraw = () =>{
+        setAutoDraw(auto => !auto);
+    }
+
+    const cards = drawn.map(c => (
+        <Card 
+            key={c.id}
+            name={c.name}
+            image={c.image} />
+    ));
 
     return (
         <div className="Deck">
-            <Card />
-            {deck ? deck : ''}
+            {deck ? (
+                <button className="Deck-draw" onClick={toggleAutoDraw}>
+                    {autoDraw ? "Stop" : null} Auto-Draw
+                </button>
+            ) : null}
+            <div className="Deck-result">{cards}</div>
         </div>
     );
 };
 
 export default Deck;
-
-// no deck is displayed on load
-// first button click loads new deck with first card
-// following button clicks load same deck with new cards
